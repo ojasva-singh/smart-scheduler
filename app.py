@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 import google.generativeai as genai
 from google.cloud import speech # Replaces Deepgram
 from elevenlabs.client import ElevenLabs
-from tools.calendar import list_upcoming_events, get_current_time, check_availability, create_calendar_event
+from tools.calendar import list_upcoming_events, get_current_time, check_availability, create_calendar_event, find_free_slots
 import datetime
 
 # 1. Load Config
@@ -26,11 +26,12 @@ tools_map = {
     'list_upcoming_events': list_upcoming_events,
     'get_current_time': get_current_time,
     'check_availability': check_availability,
-    'create_calendar_event': create_calendar_event
+    'create_calendar_event': create_calendar_event,
+    'find_free_slots': find_free_slots
 }
 
 # Pass the actual functions to Gemini
-tools = [list_upcoming_events, get_current_time, check_availability, create_calendar_event]
+tools = [list_upcoming_events, get_current_time, check_availability, create_calendar_event, find_free_slots]
 
 model = genai.GenerativeModel('gemini-2.5-flash', tools=tools)
 
@@ -49,6 +50,7 @@ async def start():
     2. BEFORE booking, ALWAYS call 'check_availability' to ensure the slot is free.
     3. If a slot is busy, politely suggest the next available time.
     4. Only call 'create_calendar_event' after the user confirms the time.
+    5. If check_availability returns a conflict, IMMEDIATELY call find_free_slots to offer alternatives. Do not ask the user to guess a time.
     """
 
     chat = model.start_chat(history=[

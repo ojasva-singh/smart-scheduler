@@ -106,3 +106,64 @@ def create_calendar_event(summary, start_time_iso, end_time_iso):
         
     except Exception as e:
         return f"Error creating event: {str(e)}"
+
+def find_free_slots(date_iso, duration_minutes=30, search_window_hours=4):
+    """
+    Finds the first 3 available slots on a given date.
+    args:
+        date_iso: The starting date/time to search from (ISO format).
+        duration_minutes: How long the meeting is.
+        search_window_hours: How many hours ahead to look.
+    """
+    try:
+        service = get_calendar_service()
+        calendar_id = os.getenv("CALENDAR_ID", "primary")
+        
+        # Parse start time
+        if 'Z' in date_iso:
+            date_iso = date_iso.replace('Z', '+00:00')
+        start_dt = datetime.datetime.fromisoformat(date_iso)
+        end_search_dt = start_dt + datetime.timedelta(hours=search_window_hours)
+        
+        # Get all events in the window
+        events_result = service.events().list(
+            calendarId=calendar_id, 
+            timeMin=start_dt.isoformat(),
+            timeMax=end_search_dt.isoformat(),
+            singleEvents=True,
+            orderBy='startTime').execute()
+        
+        events = events_result.get('items', [])
+        
+        # Simple algorithm: Check slots every 30 mins
+        free_slots = []
+        current_slot = start_dt
+        
+        # Helper to check if a specific slot overlaps with any event
+        def is_busy(slot_start, slot_end):
+            for e in events:
+                e_start = e['start'].get('dateTime') or e['start'].get('date')
+                e_end = e['end'].get('dateTime') or e['end'].get('date')
+                
+                # Basic string to dt conversion (simplified for brevity)
+                # In production, use robust ISO parsing
+                if e_start <= slot_end.isoformat() and e_end >= slot_start.isoformat():
+                    return True
+            return False
+
+        while current_slot < end_search_dt and len(free_slots) < 3:
+            slot_end = current_slot + datetime.timedelta(minutes=duration_minutes)
+            
+            if not is_busy(current_slot, slot_end):
+                free_slots.append(current_slot.strftime("%H:%M"))
+            
+            # Move to next 30 min block
+            current_slot += datetime.timedelta(minutes=30)
+            
+        if not free_slots:
+            return "No free slots found in the next 4 hours."
+            
+        return f"Found free slots: {', '.join(free_slots)}"
+
+    except Exception as e:
+        return f"Error finding slots: {str(e)}"
