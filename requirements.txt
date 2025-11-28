@@ -6,4 +6,5 @@ google-auth-httplib2
 google-api-python-client  
 python-dotenv             
 google-cloud-speech            
-elevenlabs                
+elevenlabs
+pytz

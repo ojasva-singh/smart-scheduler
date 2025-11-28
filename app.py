@@ -38,27 +38,36 @@ model = genai.GenerativeModel('gemini-2.5-flash', tools=tools)
 @cl.on_chat_start
 async def start():
     """Initializes the chat session."""
-    # Dynamic system prompt with current time to help with relative dates
-    current_time = datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
-
+    
+    # 1. Fetch the REAL current time with Timezone
+    current_time_str = get_current_time()
+    
+    # 2. Advanced System Prompt
     system_instruction = f"""
-    You are a smart scheduling assistant. 
-    Current Time: {current_time}.
-
-    Rules:
-    1. Always check 'get_current_time' if the user uses relative dates like "tomorrow".
-    2. BEFORE booking, ALWAYS call 'check_availability' to ensure the slot is free.
-    3. If a slot is busy, politely suggest the next available time.
-    4. Only call 'create_calendar_event' after the user confirms the time.
-    5. If check_availability returns a conflict, IMMEDIATELY call find_free_slots to offer alternatives. Do not ask the user to guess a time.
+    You are a smart scheduling assistant.
+    
+    CONTEXT:
+    - Current Time: {current_time_str}
+    - Timezone: Asia/Kolkata (IST)
+    
+    INSTRUCTIONS FOR TIME PARSING:
+    - If user says "tomorrow", calculate the date based on Current Time.
+    - If user says "next Tuesday", find the date for the upcoming Tuesday.
+    - If user says "2 PM", assume 2 PM IST (14:00).
+    - Convert all relative times to ISO 8601 format (YYYY-MM-DDTHH:MM:SS) for tool calls.
+    
+    PROTOCOL:
+    1. Check 'get_current_time' first if context is missing.
+    2. ALWAYS call 'check_availability' or 'find_free_slots' before confirming.
+    3. Be concise. Spoken answers should be under 10 words if possible.
     """
 
     chat = model.start_chat(history=[
         {"role": "user", "parts": system_instruction}
     ])
     cl.user_session.set("chat", chat)
-
-    await cl.Message(content="🎙️ Smart Scheduler Ready. I can check your calendar and book meetings.").send()
+    
+    await cl.Message(content="🎙️ Smart Scheduler Ready (IST Mode).").send()
 
 @cl.on_audio_end
 async def on_audio_end(elements: list[cl.Audio]):
@@ -138,11 +147,14 @@ async def on_audio_end(elements: list[cl.Audio]):
         audio_stream = elevenlabs_client.generate(
             text=final_text_response,
             voice="Rachel",
-            model="eleven_turbo_v2", 
-            stream=False 
+            model="eleven_turbo_v2_5", # reduces the tts generateion time
+            stream=True # This will reduce time to first byte 
         )
         
-        audio_bytes = b"".join(audio_stream)
+        audio_bytes = b""
+        for chunk in audio_stream:
+            if chunk:
+                audio_bytes+=chunk
         
         await cl.Message(
             content="",
