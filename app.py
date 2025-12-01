@@ -1,5 +1,6 @@
 import os
 import chainlit as cl
+from chainlit.input_widget import Switch
 from dotenv import load_dotenv
 import google.generativeai as genai
 from google.cloud import speech
@@ -53,34 +54,37 @@ async def speech_to_text(audio_file_path):
     return response.results[0].alternatives[0].transcript
 
 async def text_to_speech(text):
-    """Generates audio stream from text using ElevenLabs."""
-    return elevenlabs_client.generate(
+    """Generates audio stream using the ElevenLabs SDK."""
+    # Using the exact method from your documentation snippet
+    audio_generator = elevenlabs_client.text_to_speech.convert(
         text=text,
-        voice="Rachel",
-        model="eleven_turbo_v2_5", # Optimized for latency
-        stream=True
+        voice_id="cgSgspJ2msm6clMCkdW9", # Rachel (Legacy) or similar ID
+        model_id="eleven_turbo_v2_5",    # Low latency model
+        output_format="mp3_44100_128",
     )
+    return audio_generator
 
 async def run_agent_logic(user_text, chat_session):
     """
-    Core Agent Logic: Sends text to Gemini, handles Tool calls, returns final text.
+    Handles the conversation loop. 
+    Crucial Fix: Handles Multiple Tool Calls in a row before returning text.
     """
-    # UI Feedback: Show "Thinking" animation
-    async with cl.Step(name="Gemini", type="llm") as step:
-        step.input = user_text
-        
-        # 1. Send user text to Gemini
-        response = chat_session.send_message(user_text)
+    
+    # 1. Send initial message
+    response = chat_session.send_message(user_text)
+    
+    # 2. LOOP: While Gemini wants to call a function, execute it and send results back.
+    while True:
         part = response.candidates[0].content.parts[0]
         
-        # 2. Check for Tool Calls (Function Calling)
+        # If it's a function call
         if part.function_call:
             function_name = part.function_call.name
             function_args = part.function_call.args
             
-            # Create a sub-step for the tool
-            async with cl.Step(name=function_name, type="tool") as tool_step:
-                tool_step.input = f"Args: {function_args}"
+            # UI: Show what tool is running
+            async with cl.Step(name=function_name, type="tool") as step:
+                step.input = f"Args: {function_args}"
                 
                 if function_name in tools_map:
                     tool_func = tools_map[function_name]
@@ -92,10 +96,10 @@ async def run_agent_logic(user_text, chat_session):
                 else:
                     tool_result = "Error: Tool not found."
                 
-                tool_step.output = str(tool_result)
+                step.output = str(tool_result)
 
-            # 3. Send Tool Result back to Gemini
-            final_response = chat_session.send_message(
+            # Send result back to Gemini and get the NEXT response
+            response = chat_session.send_message(
                 genai.protos.Content(
                     parts=[genai.protos.Part(
                         function_response=genai.protos.FunctionResponse(
@@ -105,87 +109,91 @@ async def run_agent_logic(user_text, chat_session):
                     )]
                 )
             )
-            final_text = final_response.text
+            # The loop continues... Gemini will either call another tool OR return text.
         else:
-            final_text = response.text
-        
-        step.output = final_text
-        return final_text
+            # It's text! We can break the loop.
+            break
+
+    return response.text
 
 # --- CHAINLIT HANDLERS ---
 
 @cl.on_chat_start
 async def start():
-    """Setup the session and interactions."""
+    """Setup session."""
     
-    # 1. Initialize Session Variables
+    # 1. Settings
+    await cl.ChatSettings(
+        [Switch(id="VoiceMode", label="Voice Mode (Auto-Speak)", initial=True)]
+    ).send()
     cl.user_session.set("voice_mode", True)
     
-    # 2. Initialize Gemini Chat
+    # 2. System Prompt
     current_time_str = get_current_time()
     system_instruction = f"""
-    You are a smart scheduling assistant.
-    CONTEXT: Current Time: {current_time_str} | Timezone: Asia/Kolkata (IST)
-    RULES:
-    1. Check 'get_current_time' for relative dates (tomorrow, next week).
-    2. ALWAYS call 'check_availability' or 'find_free_slots' before confirming.
-    3. Keep responses CONCISE (max 1-2 sentences) for voice interaction.
+    You are a professional Executive Scheduling Assistant for Ojasva.
+    
+    CONTEXT:
+    - Current Time: {current_time_str}
+    - Timezone: Asia/Kolkata (IST)
+    
+    STRICT AVAILABILITY RULES:
+    - Ojasva ONLY takes meetings during these slots:
+      1. Morning: 09:00 AM to 12:00 PM IST
+      2. Evening: 04:00 PM to 07:00 PM IST
+    - If a user requests time outside these slots, only then politely decline and offer a slot within working hours. Don't tell the working hours until a conflict is there.
+    
+    EMERGENCY PROTOCOL:
+    - If the user insists on an urgent meeting outside working hours, provide this email: ojasva963@gmail.com
+    - Do NOT book the meeting yourself if it violates the hours.
+    
+    BOOKING FLOW:
+    1. Understand the request (Day/Time).
+    2. CALL 'check_availability' or 'find_free_slots'.
+    3. If slot is free AND within working hours -> ASK for:
+       - Meeting Title/Purpose
+       - User's Email Address
+    4. ONLY after getting Title and Email -> CALL 'create_calendar_event'.
+    
+    STYLE:
+    - Concise (spoken style) Maximum 2 sentences.
+    - Professional but firm on working hours.
     """
     
     chat = model.start_chat(history=[{"role": "user", "parts": system_instruction}])
     cl.user_session.set("chat", chat)
     
-    # 3. Create the Toggle Button (Action) with FIXED payload
-    actions = [
-        cl.Action(name="toggle_voice", payload={"value": "on"}, label="🔊 Voice Mode: ON")
-    ]
-    
-    await cl.Message(content="🎙️ **Smart Scheduler Ready.**", actions=actions).send()
+    await cl.Message(content="🎙️ **Smart Scheduler Online.**\n\nI handle Ojasva's calendar (9am-12pm & 4pm-7pm).").send()
 
-@cl.action_callback("toggle_voice")
-async def on_action(action: cl.Action):
-    """Handler for the Voice Toggle Button."""
-    voice_mode = cl.user_session.get("voice_mode")
-    
-    if voice_mode:
-        # Turn OFF
-        cl.user_session.set("voice_mode", False)
-        action.label = "🔇 Voice Mode: OFF"
-        action.payload["value"] = "off"
-        await cl.Message(content="ℹ️ Voice response disabled.").send()
-    else:
-        # Turn ON
-        cl.user_session.set("voice_mode", True)
-        action.label = "🔊 Voice Mode: ON"
-        action.payload["value"] = "on"
-        await cl.Message(content="ℹ️ Voice response enabled.").send()
-    
-    await action.update()
+@cl.on_settings_update
+async def setup_agent(settings):
+    cl.user_session.set("voice_mode", settings["VoiceMode"])
+    status = "enabled" if settings["VoiceMode"] else "disabled"
+    await cl.Message(content=f"ℹ️ Voice response {status}.").send()
 
 @cl.on_message
 async def on_text_message(message: cl.Message):
-    """Handles text input (Typing)."""
+    """Handles text input."""
     user_text = message.content
     chat = cl.user_session.get("chat")
     
-    # Run Agent Logic
+    # Run Agent Logic (Now loop-safe)
     final_text = await run_agent_logic(user_text, chat)
     
-    # Check Voice Mode
     voice_mode = cl.user_session.get("voice_mode")
-    
     elements = []
+    
     if voice_mode:
-        # Generate Audio
-        audio_stream = await text_to_speech(final_text)
-        audio_bytes = b"".join(audio_stream)
+        audio_generator = await text_to_speech(final_text)
+        # Convert generator to bytes
+        audio_bytes = b"".join(audio_generator)
         elements = [cl.Audio(content=audio_bytes, name="reply.mp3", auto_play=True)]
     
     await cl.Message(content=final_text, elements=elements).send()
 
 @cl.on_audio_end
 async def on_audio_message(elements: list[cl.Audio]):
-    """Handles voice input (Microphone)."""
+    """Handles microphone input."""
     try:
         # 1. Transcribe
         audio_path = elements[0].path
@@ -195,20 +203,19 @@ async def on_audio_message(elements: list[cl.Audio]):
             await cl.Message(content="😕 I couldn't hear anything.").send()
             return
 
-        # Show transcription to user
         await cl.Message(content=f"🗣️ *You said:* {user_text}", author="User").send()
         
-        # 2. Run Agent Logic
+        # 2. Logic
         chat = cl.user_session.get("chat")
         final_text = await run_agent_logic(user_text, chat)
         
-        # 3. Respond
+        # 3. Speak
         voice_mode = cl.user_session.get("voice_mode")
         response_elements = []
         
         if voice_mode:
-            audio_stream = await text_to_speech(final_text)
-            audio_bytes = b"".join(audio_stream)
+            audio_generator = await text_to_speech(final_text)
+            audio_bytes = b"".join(audio_generator)
             response_elements = [cl.Audio(content=audio_bytes, name="reply.mp3", auto_play=True)]
         
         await cl.Message(content=final_text, elements=response_elements).send()
