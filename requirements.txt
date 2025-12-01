@@ -8,3 +8,4 @@ python-dotenv
 google-cloud-speech            
 elevenlabs
 pytz
+pydub

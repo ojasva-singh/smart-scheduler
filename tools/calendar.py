@@ -9,7 +9,6 @@ SCOPES = ['https://www.googleapis.com/auth/calendar']
 SERVICE_ACCOUNT_FILE = 'credentials.json'
 
 # --- CONFIGURATION ---
-# Change this to 'America/New_York', 'Europe/London', etc. if needed
 USER_TIMEZONE = 'Asia/Kolkata' 
 
 def get_calendar_service():
@@ -114,7 +113,6 @@ def create_calendar_event(summary, start_time_iso, end_time_iso):
     except Exception as e:
         return f"Error creating event: {str(e)}"
 
-# Re-adding the smart search tool we discussed earlier
 def find_free_slots(date_iso, duration_minutes=30):
     """Finds free slots starting from date_iso."""
     try:

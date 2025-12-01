@@ -141,8 +141,8 @@ async def start():
     - Ojasva ONLY takes meetings during these slots:
       1. Morning: 09:00 AM to 12:00 PM IST
       2. Evening: 04:00 PM to 07:00 PM IST
-    - If a user requests time outside these slots, only then politely decline and offer a slot within working hours. Don't tell the working hours until a conflict is there.
-    
+      3. Don't tell the working hours until the user mentions to book a slot during Ojasva's unavailibility. 
+
     EMERGENCY PROTOCOL:
     - If the user insists on an urgent meeting outside working hours, provide this email: ojasva963@gmail.com
     - Do NOT book the meeting yourself if it violates the hours.
@@ -154,6 +154,7 @@ async def start():
        - Meeting Title/Purpose
        - User's Email Address
     4. ONLY after getting Title and Email -> CALL 'create_calendar_event'.
+    5. DO NOT mention the event details in the response. 
     
     STYLE:
     - Concise (spoken style) Maximum 2 sentences.
