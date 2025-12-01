@@ -1,5 +1,6 @@
 import os
 import datetime
+from typing import Optional
 import pytz # New import
 from google.auth.transport.requests import Request
 from google.oauth2 import service_account
@@ -168,3 +169,6 @@ def find_free_slots(date_iso, duration_minutes=30):
 
     except Exception as e:
         return f"Error finding slots: {str(e)}"
+
+def send_calendar_invite(email: Optional):
+    pass
