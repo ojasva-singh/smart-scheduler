@@ -7,10 +7,11 @@ from google.cloud import speech
 from elevenlabs.client import ElevenLabs
 from tools.calendar import (
     list_upcoming_events, get_current_time, 
-    check_availability, create_calendar_event, find_free_slots, send_calendar_invite
+    check_availability, create_calendar_event, find_free_slots
 )
 #from groq import Groq
 import wave
+import tempfile
 
 # --- CONFIGURATION ---
 load_dotenv()
@@ -34,8 +35,7 @@ tools_map = {
     'get_current_time': get_current_time,
     'check_availability': check_availability,
     'create_calendar_event': create_calendar_event,
-    'find_free_slots': find_free_slots,
-    'send_calendar_invite': send_calendar_invite
+    'find_free_slots': find_free_slots
 }
 tools = [list_upcoming_events, get_current_time, check_availability, create_calendar_event, find_free_slots]
 model = genai.GenerativeModel('gemini-2.5-flash', tools=tools)
@@ -99,7 +99,6 @@ async def speech_to_text(audio_file_path):
 
 async def text_to_speech(text):
     """Generates audio stream using the ElevenLabs SDK."""
-    # Using the exact method from your documentation snippet
     audio_generator = elevenlabs_client.text_to_speech.convert(
         text=text,
         voice_id="cgSgspJ2msm6clMCkdW9", # Rachel (Legacy) or similar ID
@@ -111,7 +110,6 @@ async def text_to_speech(text):
 async def run_agent_logic(user_text, chat_session):
     """
     Handles the conversation loop. 
-    Crucial Fix: Handles Multiple Tool Calls in a row before returning text.
     """
     
     # 1. Send initial message
@@ -199,9 +197,8 @@ async def start():
     -> ACTION: Call 'check_availability'.
     
     CASE 5: Slot is Free & Inside Working Hours
-    -> ACTION: Ask for Meeting Title & a User Email (The user email is not mandatory).
+    -> ACTION: Ask for Meeting Title.
     -> After getting the TITLE -> CALL 'create_calendar_event'.
-    -> IF Email is mentioned -> CALL 'send_calendar_invite'.
 
     STYLE:
     - Concise (spoken style), max 2 sentences.
@@ -283,7 +280,6 @@ async def on_audio_end():
             return
         
         # 3. Save to temporary file
-        import tempfile
         with tempfile.NamedTemporaryFile(mode='wb', suffix='.webm', delete=False) as f:
             f.write(audio_buffer)
             audio_path = f.name
