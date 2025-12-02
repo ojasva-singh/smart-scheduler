@@ -101,7 +101,7 @@ async def text_to_speech(text):
     """Generates audio stream using the ElevenLabs SDK."""
     audio_generator = elevenlabs_client.text_to_speech.convert(
         text=text,
-        voice_id="cgSgspJ2msm6clMCkdW9", # Rachel (Legacy) or similar ID
+        voice_id="cgSgspJ2msm6clMCkdW9", 
         model_id="eleven_turbo_v2_5",    # Low latency model
         output_format="mp3_44100_128",
     )
