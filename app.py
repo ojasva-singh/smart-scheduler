@@ -207,7 +207,7 @@ async def start():
     chat = model.start_chat(history=[{"role": "user", "parts": system_instruction}])
     cl.user_session.set("chat", chat)
     
-    await cl.Message(content="🎙️ **Smart Scheduler Online.**\n\nI handle Ojasva's calendar (9am-12pm & 4pm-7pm).").send()
+    await cl.Message(content="🎙️ **Smart Scheduler Online.**").send()
 
 @cl.on_settings_update
 async def setup_agent(settings):
