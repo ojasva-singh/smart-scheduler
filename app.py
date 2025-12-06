@@ -5,10 +5,7 @@ from dotenv import load_dotenv
 import google.generativeai as genai
 from google.cloud import speech
 from elevenlabs.client import ElevenLabs
-from tools.calendar import (
-    list_upcoming_events, get_current_time, 
-    check_availability, create_calendar_event, find_free_slots
-)
+from tools.calendar import (list_upcoming_events, get_current_time, check_availability, create_calendar_event, find_free_slots)
 #from groq import Groq
 import wave
 import tempfile

@@ -1,6 +1,5 @@
 import os
 import datetime
-from typing import Optional
 import pytz
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
@@ -28,7 +27,6 @@ def get_current_time():
     """
     tz = pytz.timezone(USER_TIMEZONE)
     now = datetime.datetime.now(tz)
-    # returning Weekday helps the LLM calculate "Next Tuesday"
     return now.strftime("%A, %Y-%m-%d %H:%M:%S %Z")
 
 def list_upcoming_events(max_results=5):
@@ -119,7 +117,6 @@ def find_free_slots(date_iso, duration_minutes=30):
         service = get_calendar_service()
         calendar_id = os.getenv("CALENDAR_ID", "primary")
         
-        # Ensure we work with offsets
         start_dt = datetime.datetime.fromisoformat(date_iso)
         if start_dt.tzinfo is None:
              tz = pytz.timezone(USER_TIMEZONE)
